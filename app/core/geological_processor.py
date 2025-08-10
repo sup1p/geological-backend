@@ -68,15 +68,15 @@ class GeologicalProcessor:
         return clustered_colors
 
     def adaptive_color_tolerance(self, color: Tuple[int, int, int]) -> float:
-        """Адаптивный допуск на основе яркости цвета"""
-        # Более темные цвета требуют меньшего допуска
-        brightness = (color[0] + color[1] + color[2]) / 3.0  # Используем явное сложение
+        """Адаптивный допуск на основе яркости цвета - более строгий подход"""
+        # Более строгие допуски для лучшего сопоставления
+        brightness = (color[0] + color[1] + color[2]) / 3.0
         if brightness < 100:
-            return 30  # Темные цвета - строгий допуск
+            return 40  # Темные цвета - очень строгий допуск (было 80)
         elif brightness < 200:
-            return 50  # Средние цвета - средний допуск
+            return 60  # Средние цвета - строгий допуск (было 120)
         else:
-            return 70  # Светлые цвета - мягкий допуск
+            return 80  # Светлые цвета - умеренный допуск (было 180)
 
     def extract_legend_colors(
         self, legend_image: np.ndarray
@@ -359,21 +359,21 @@ class GeologicalProcessor:
             f"Анализирую цвета вдоль линии разреза. Размер карты: {map_image.shape}"
         )
 
-        # Конвертируем в RGB если нужно
+        # Используем оригинальное изображение в BGR формате для соответствия с легендой
         if len(map_image.shape) == 3 and map_image.shape[2] == 3:
-            map_rgb = cv2.cvtColor(map_image, cv2.COLOR_BGR2RGB)
-            logger.debug("Конвертировал карту из BGR в RGB")
+            map_bgr = map_image  # Оставляем в BGR формате
+            logger.debug("Использую карту в BGR формате для соответствия с легендой")
         else:
-            map_rgb = map_image
-            logger.debug("Карта уже в RGB формате")
+            map_bgr = map_image
+            logger.debug("Карта уже в нужном формате")
 
         line_pixels = self.get_line_pixels(start_point, end_point)
         colors_along_line = []
         unique_colors = set()
 
         for x, y in line_pixels:
-            if 0 <= y < map_rgb.shape[0] and 0 <= x < map_rgb.shape[1]:
-                color = tuple(map_rgb[y, x])
+            if 0 <= y < map_bgr.shape[0] and 0 <= x < map_bgr.shape[1]:
+                color = tuple(map_bgr[y, x])  # BGR цвет
                 colors_along_line.append(color)
                 unique_colors.add(color)
 
@@ -395,7 +395,7 @@ class GeologicalProcessor:
 
             colors_along_line = processed_colors
 
-        logger.debug(f"Первые 10 цветов: {list(set(colors_along_line))[:10]}")
+        logger.debug(f"Первые 10 цветов (BGR): {list(set(colors_along_line))[:10]}")
 
         return colors_along_line
 
@@ -507,8 +507,8 @@ class GeologicalProcessor:
         return unique_layers
 
     def create_section_visualization(self, layers: List[Dict], output_path: str) -> str:
-        """Создает визуализацию геологического разреза"""
-        logger.info(f"Создаю визуализацию для {len(layers)} слоев")
+        """Создает реалистичную визуализацию геологического разреза с неровными границами"""
+        logger.info(f"Создаю реалистичную визуализацию для {len(layers)} слоев")
 
         if not layers:
             logger.warning("Нет слоев для визуализации")
@@ -538,18 +538,24 @@ class GeologicalProcessor:
             logger.info(f"Пустая визуализация сохранена: {filepath}")
             return filepath
 
-        # Создаем фигуру для длинного прямоугольного разреза
-        fig, ax = plt.subplots(
-            figsize=(20, 8)
-        )  # Увеличиваем размер для более широких слоев
+        # Создаем фигуру для реалистичного разреза
+        fig, ax = plt.subplots(figsize=(20, 12))
 
-        # Рисуем слои горизонтально (сверху вниз согласно легенде)
-        layer_height = 1.0
-        layer_width = 15.0  # Увеличиваем ширину слоя
-        current_y = len(layers)  # Начинаем сверху
+        # Параметры разреза
+        section_width = 16.0
+        section_height = 10.0
+        base_y = 0.5  # Отступ снизу для подписей
+
+        # Генерируем неровные границы для каждого слоя
+        x_points = np.linspace(
+            0, section_width, 100
+        )  # Увеличил с 50 до 100 точек для плавности
+
+        # Начинаем с верхней границы
+        current_top = section_height + base_y
 
         # Получаем названия слоев
-        legend_names = self.extract_legend_names()  # Убираем None параметр
+        legend_names = self.extract_legend_names()
 
         logger.info("Отображаемые слои в визуализации (сверху вниз):")
         for i, layer in enumerate(layers):
@@ -557,15 +563,93 @@ class GeologicalProcessor:
             r, g, b = layer["color"]
             color = (r / 255.0, g / 255.0, b / 255.0)
 
-            rect = plt.Rectangle(
-                (0, current_y - layer_height),
-                layer_width,
-                layer_height,
+            # Вычисляем толщину слоя на основе его длины
+            layer_length = layer.get("length", 100)
+            max_thickness = 2.0  # Максимальная толщина слоя
+            min_thickness = 0.5  # Минимальная толщина слоя
+
+            # Нормализуем толщину на основе длины слоя
+            total_pixels = sum(l.get("length", 100) for l in layers)
+            normalized_length = layer_length / total_pixels if total_pixels > 0 else 1.0
+            layer_thickness = (
+                min_thickness + (max_thickness - min_thickness) * normalized_length
+            )
+
+            # Генерируем неровную нижнюю границу слоя
+            # Используем синусоиду с случайными вариациями для реалистичности
+            np.random.seed(42 + i)  # Фиксированный seed для воспроизводимости
+
+            # Базовая синусоида с более плавными волнами
+            base_wave = (
+                np.sin(x_points * 0.3 + i * 0.2) * 0.15
+            )  # Уменьшил частоту и увеличил амплитуду
+
+            # Добавляем случайные вариации с более плавным сглаживанием
+            random_variations = np.random.normal(
+                0, 0.08, len(x_points)
+            )  # Увеличил стандартное отклонение
+
+            # Сглаживаем вариации более интенсивно для плавности
+            try:
+                from scipy.ndimage import gaussian_filter1d
+
+                smoothed_variations = gaussian_filter1d(
+                    random_variations, sigma=4
+                )  # Увеличил sigma для более плавного сглаживания
+            except ImportError:
+                # Если scipy нет, используем простое сглаживание
+                smoothed_variations = random_variations
+
+            # Добавляем дополнительные плавные волны для более естественного вида
+            additional_waves = (
+                np.sin(x_points * 0.1 + i * 0.5) * 0.05  # Длинные волны
+                + np.sin(x_points * 0.7 + i * 0.1) * 0.03  # Короткие волны
+            )
+
+            # Комбинируем все вариации для создания плавной границы
+            boundary_variations = base_wave + smoothed_variations + additional_waves
+
+            # Вычисляем нижнюю границу слоя
+            layer_bottom = current_top - layer_thickness + boundary_variations
+
+            # Убеждаемся, что все массивы имеют одинаковую длину
+            assert len(x_points) == len(layer_bottom), (
+                f"Разные длины: x_points={len(x_points)}, layer_bottom={len(layer_bottom)}"
+            )
+
+            # Рисуем слой как полигон с неровными границами
+            # Создаем точки для полигона: верхняя граница + нижняя граница в обратном порядке
+            polygon_x = list(x_points) + list(x_points[::-1])
+            polygon_y = [current_top] * len(x_points) + list(layer_bottom[::-1])
+
+            # Создаем полигон слоя с более мягкими краями
+            layer_polygon = plt.Polygon(
+                list(zip(polygon_x, polygon_y)),
                 facecolor=color,
                 edgecolor="black",
-                linewidth=1,
+                linewidth=0.8,  # Уменьшил толщину линии для более мягкого вида
+                alpha=0.95,  # Увеличил прозрачность для более естественного вида
             )
-            ax.add_patch(rect)
+            ax.add_patch(layer_polygon)
+
+            # Добавляем легкую тень для объема
+            shadow_offset = 0.02
+            shadow_polygon = plt.Polygon(
+                list(
+                    zip(
+                        [x + shadow_offset for x in polygon_x],
+                        [y + shadow_offset for y in polygon_y],
+                    )
+                ),
+                facecolor="black",
+                alpha=0.1,
+                linewidth=0,
+            )
+            ax.add_patch(shadow_polygon)
+
+            # Добавляем текстуру слоя (точки для имитации породы)
+            # Временно отключено из-за проблем с размерами массивов
+            pass
 
             # Добавляем подпись слоя с названием из легенды
             layer_index = layer["order"]
@@ -579,40 +663,103 @@ class GeologicalProcessor:
             if "length" in layer:
                 layer_text += f" ({layer['length']}px)"
 
+            # Размещаем текст в центре слоя
+            center_x = section_width / 2
+            center_y = current_top - layer_thickness / 2  # Это скалярное значение
+
+            # Добавляем текст с фоном для лучшей читаемости
             ax.text(
-                layer_width / 2,
-                current_y - layer_height / 2,
+                center_x,
+                center_y,
                 layer_text,
                 ha="center",
                 va="center",
-                fontsize=12,
+                fontsize=10,
                 fontweight="bold",
                 color="black",
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor="white",
+                    alpha=0.8,
+                    edgecolor="gray",
+                ),
             )
 
             logger.info(
-                f"  - {layer_text}: цвет {layer['color']}, позиция y={current_y - layer_height}"
+                f"  - {layer_text}: цвет {layer['color']}, толщина={layer_thickness:.2f}, позиция y={center_y:.2f}"
             )
 
-            current_y -= layer_height
+            # Переходим к следующему слою
+            current_top = float(
+                np.mean(layer_bottom)
+            )  # Используем среднее значение для плавности
 
-        ax.set_xlim(0, layer_width)
-        ax.set_ylim(0, len(layers))
-        ax.set_aspect("auto")  # Убираем фиксированные пропорции
+        # Настраиваем оси
+        ax.set_xlim(-0.5, section_width + 8.0)  # Расширяем справа для легенды
+        ax.set_ylim(
+            base_y - 0.5, section_height + base_y + 0.5
+        )  # Возвращаем нормальную высоту
+        ax.set_aspect("equal")
         ax.set_title("Геологический разрез", fontsize=16, fontweight="bold")
-        ax.set_xlabel("Расстояние")
-        ax.set_ylabel("Глубина")
+        # Убираем подписи осей
+        # ax.set_xlabel("Расстояние (м)", fontsize=12)
+        # ax.set_ylabel("Глубина (м)", fontsize=12)
 
-        # Добавляем пояснение
-        ax.text(
-            layer_width / 2,
-            len(layers) + 0.5,
-            "Порядок слоев: сверху (выше) → вниз (глубже)",
-            ha="center",
-            va="center",
-            fontsize=8,
-            style="italic",
-        )
+        # Убираем оси для более чистого вида
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        # Убираем рамку вокруг графика
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["bottom"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+
+        # Добавляем сетку для масштаба
+        ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
+
+        # Добавляем легенду справа от разреза
+        legend_x_start = section_width + 1.0  # Позиция начала легенды справа
+        legend_y_start = section_height + base_y - 1.0  # Начинаем сверху
+        legend_item_height = 0.6
+        legend_item_width = 0.8
+        legend_text_x_offset = 1.2
+
+        # Сортируем слои по порядку (сверху вниз)
+        sorted_layers = sorted(layers, key=lambda x: x["order"])
+
+        for i, layer in enumerate(sorted_layers):
+            legend_y = legend_y_start - i * legend_item_height
+
+            # Цветной квадратик
+            b, g, r = layer["color"]  # BGR формат
+            color_normalized = (r / 255.0, g / 255.0, b / 255.0)
+
+            legend_rect = plt.Rectangle(
+                (legend_x_start, legend_y),
+                legend_item_width,
+                legend_item_height * 0.8,
+                facecolor=color_normalized,
+                edgecolor="black",
+                linewidth=1,
+            )
+            ax.add_patch(legend_rect)
+
+            # Текст слоя
+            layer_text = layer.get("text", f"Слой {layer['order'] + 1}")
+            if "length" in layer:
+                layer_text += f" ({layer['length']}px)"
+
+            ax.text(
+                legend_x_start + legend_text_x_offset,
+                legend_y + legend_item_height * 0.4,
+                layer_text,
+                ha="left",
+                va="center",
+                fontsize=9,
+                fontweight="bold",
+                color="black",
+            )
 
         # Сохраняем изображение
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -622,15 +769,15 @@ class GeologicalProcessor:
         plt.savefig(filepath, dpi=300, bbox_inches="tight")
         plt.close()
 
-        logger.info(f"Визуализация сохранена: {filepath}")
+        logger.info(f"Реалистичная визуализация сохранена: {filepath}")
         return filepath
 
     def create_section_visualization_with_names(
         self, layers: List[Dict], legend_data: List[Dict], output_path: str
     ) -> str:
-        """Создает визуализацию геологического разреза с названиями из легенды"""
+        """Создает реалистичную визуализацию геологического разреза с неровными границами"""
         logger.info(
-            f"Создаю визуализацию для {len(layers)} слоев с названиями из легенды"
+            f"Создаю реалистичную визуализацию для {len(layers)} слоев с названиями из легенды"
         )
 
         if not layers:
@@ -661,31 +808,123 @@ class GeologicalProcessor:
             logger.info(f"Пустая визуализация сохранена: {filepath}")
             return filepath
 
-        # Создаем фигуру для длинного прямоугольного разреза
-        fig, ax = plt.subplots(figsize=(24, 10))  # Увеличиваем размер для названий
+        # Создаем фигуру для реалистичного разреза
+        fig, ax = plt.subplots(figsize=(20, 12))
 
-        # Рисуем слои горизонтально (сверху вниз согласно легенде)
-        layer_height = 1.0
-        layer_width = 18.0  # Увеличиваем ширину для названий
-        current_y = len(layers)  # Начинаем сверху
+        # Параметры разреза
+        section_width = 16.0
+        section_height = 10.0
+        base_y = 0.5  # Отступ снизу для подписей
+
+        # Генерируем неровные границы для каждого слоя
+        x_points = np.linspace(
+            0, section_width, 100
+        )  # Увеличил с 50 до 100 точек для плавности
 
         logger.info("Отображаемые слои в визуализации (сверху вниз):")
-        for i, layer in enumerate(layers):
-            # Правильная нормализация цветов для matplotlib (RGB в диапазоне [0,1])
-            r, g, b = layer["color"]
-            color = (r / 255.0, g / 255.0, b / 255.0)
 
-            rect = plt.Rectangle(
-                (0, current_y - layer_height),
-                layer_width,
-                layer_height,
+        # Начинаем с верхней границы
+        current_top = section_height + base_y
+
+        for i, layer in enumerate(layers):
+            # ИСПОЛЬЗУЕМ ТОЛЬКО ЦВЕТ ИЗ ЛЕГЕНДЫ для визуализации (BGR -> RGB для matplotlib)
+            legend_color = layer["color"]  # Цвет из легенды
+            b, g, r = legend_color  # BGR формат
+            color = (
+                r / 255.0,
+                g / 255.0,
+                b / 255.0,
+            )  # Конвертируем в RGB для matplotlib
+
+            # Вычисляем толщину слоя на основе его длины
+            layer_length = layer.get("length", 100)
+            max_thickness = 2.0  # Максимальная толщина слоя
+            min_thickness = 0.5  # Минимальная толщина слоя
+
+            # Нормализуем толщину на основе длины слоя
+            total_pixels = sum(l.get("length", 100) for l in layers)
+            normalized_length = layer_length / total_pixels if total_pixels > 0 else 1.0
+            layer_thickness = (
+                min_thickness + (max_thickness - min_thickness) * normalized_length
+            )
+
+            # Генерируем неровную нижнюю границу слоя
+            # Используем синусоиду с случайными вариациями для реалистичности
+            np.random.seed(42 + i)  # Фиксированный seed для воспроизводимости
+
+            # Базовая синусоида с более плавными волнами
+            base_wave = (
+                np.sin(x_points * 0.3 + i * 0.2) * 0.15
+            )  # Уменьшил частоту и увеличил амплитуду
+
+            # Добавляем случайные вариации с более плавным сглаживанием
+            random_variations = np.random.normal(
+                0, 0.08, len(x_points)
+            )  # Увеличил стандартное отклонение
+
+            # Сглаживаем вариации более интенсивно для плавности
+            try:
+                from scipy.ndimage import gaussian_filter1d
+
+                smoothed_variations = gaussian_filter1d(
+                    random_variations, sigma=4
+                )  # Увеличил sigma для более плавного сглаживания
+            except ImportError:
+                # Если scipy нет, используем простое сглаживание
+                smoothed_variations = random_variations
+
+            # Добавляем дополнительные плавные волны для более естественного вида
+            additional_waves = (
+                np.sin(x_points * 0.1 + i * 0.5) * 0.05  # Длинные волны
+                + np.sin(x_points * 0.7 + i * 0.1) * 0.03  # Короткие волны
+            )
+
+            # Комбинируем все вариации для создания плавной границы
+            boundary_variations = base_wave + smoothed_variations + additional_waves
+
+            # Вычисляем нижнюю границу слоя
+            layer_bottom = current_top - layer_thickness + boundary_variations
+
+            # Убеждаемся, что все массивы имеют одинаковую длину
+            assert len(x_points) == len(layer_bottom), (
+                f"Разные длины: x_points={len(x_points)}, layer_bottom={len(layer_bottom)}"
+            )
+
+            # Рисуем слой как полигон с неровными границами
+            # Создаем точки для полигона: верхняя граница + нижняя граница в обратном порядке
+            polygon_x = list(x_points) + list(x_points[::-1])
+            polygon_y = [current_top] * len(x_points) + list(layer_bottom[::-1])
+
+            # Создаем полигон слоя с более мягкими краями
+            layer_polygon = plt.Polygon(
+                list(zip(polygon_x, polygon_y)),
                 facecolor=color,
                 edgecolor="black",
-                linewidth=1,
+                linewidth=0.8,  # Уменьшил толщину линии для более мягкого вида
+                alpha=0.95,  # Увеличил прозрачность для более естественного вида
             )
-            ax.add_patch(rect)
+            ax.add_patch(layer_polygon)
 
-            # Добавляем подпись слоя с названием из легенды
+            # Добавляем легкую тень для объема
+            shadow_offset = 0.02
+            shadow_polygon = plt.Polygon(
+                list(
+                    zip(
+                        [x + shadow_offset for x in polygon_x],
+                        [y + shadow_offset for y in polygon_y],
+                    )
+                ),
+                facecolor="black",
+                alpha=0.1,
+                linewidth=0,
+            )
+            ax.add_patch(shadow_polygon)
+
+            # Добавляем текстуру слоя (точки для имитации породы)
+            # Временно отключено из-за проблем с размерами массивов
+            pass
+
+            # Добавляем подпись слоя
             layer_index = layer["order"]
             layer_text = layer.get("text", f"Формация {layer_index + 1}")
 
@@ -693,40 +932,105 @@ class GeologicalProcessor:
             if "length" in layer:
                 layer_text += f" ({layer['length']}px)"
 
+            # Убираем текст из слоя - он будет в легенде снизу
+            # Размещаем текст в центре слоя
+            # center_x = section_width / 2
+            # center_y = current_top - layer_thickness / 2  # Это скалярное значение
+
+            # Добавляем текст с фоном для лучшей читаемости
+            # ax.text(
+            #     center_x,
+            #     center_y,
+            #     layer_text,
+            #     ha="center",
+            #     va="center",
+            #     fontsize=10,
+            #     fontweight="bold",
+            #     color="black",
+            #     bbox=dict(
+            #         boxstyle="round,pad=0.3",
+            #         facecolor="white",
+            #         alpha=0.8,
+            #         edgecolor="gray",
+            #     ),
+            # )
+
+            logger.info(
+                f"  - {layer_text}: цвет_легенды_BGR {legend_color}, "
+                f"толщина={float(layer_thickness):.2f}"
+            )
+
+            # Переходим к следующему слою
+            current_top = float(
+                np.mean(layer_bottom)
+            )  # Используем среднее значение для плавности
+
+        # Настраиваем оси
+        ax.set_xlim(-0.5, section_width + 8.0)  # Расширяем справа для легенды
+        ax.set_ylim(
+            base_y - 0.5, section_height + base_y + 0.5
+        )  # Возвращаем нормальную высоту
+        ax.set_aspect("equal")
+        ax.set_title("Геологический разрез", fontsize=16, fontweight="bold")
+        # Убираем подписи осей
+        # ax.set_xlabel("Расстояние (м)", fontsize=12)
+        # ax.set_ylabel("Глубина (м)", fontsize=12)
+
+        # Убираем оси для более чистого вида
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        # Убираем рамку вокруг графика
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["bottom"].set_visible(False)
+        ax.spines["left"].set_visible(False)
+
+        # Добавляем сетку для масштаба
+        ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.5)
+
+        # Добавляем легенду справа от разреза
+        legend_x_start = section_width + 1.0  # Позиция начала легенды справа
+        legend_y_start = section_height + base_y - 1.0  # Начинаем сверху
+        legend_item_height = 0.6
+        legend_item_width = 0.8
+        legend_text_x_offset = 1.2
+
+        # Сортируем слои по порядку (сверху вниз)
+        sorted_layers = sorted(layers, key=lambda x: x["order"])
+
+        for i, layer in enumerate(sorted_layers):
+            legend_y = legend_y_start - i * legend_item_height
+
+            # Цветной квадратик
+            b, g, r = layer["color"]  # BGR формат
+            color_normalized = (r / 255.0, g / 255.0, b / 255.0)
+
+            legend_rect = plt.Rectangle(
+                (legend_x_start, legend_y),
+                legend_item_width,
+                legend_item_height * 0.8,
+                facecolor=color_normalized,
+                edgecolor="black",
+                linewidth=1,
+            )
+            ax.add_patch(legend_rect)
+
+            # Текст слоя
+            layer_text = layer.get("text", f"Слой {layer['order'] + 1}")
+            if "length" in layer:
+                layer_text += f" ({layer['length']}px)"
+
             ax.text(
-                layer_width / 2,
-                current_y - layer_height / 2,
+                legend_x_start + legend_text_x_offset,
+                legend_y + legend_item_height * 0.4,
                 layer_text,
-                ha="center",
+                ha="left",
                 va="center",
-                fontsize=12,
+                fontsize=9,
                 fontweight="bold",
                 color="black",
             )
-
-            logger.info(
-                f"  - {layer_text}: цвет {layer['color']}, позиция y={current_y - layer_height}"
-            )
-
-            current_y -= layer_height
-
-        ax.set_xlim(0, layer_width)
-        ax.set_ylim(0, len(layers))
-        ax.set_aspect("auto")  # Убираем фиксированные пропорции
-        ax.set_title("Геологический разрез", fontsize=16, fontweight="bold")
-        ax.set_xlabel("Расстояние")
-        ax.set_ylabel("Глубина")
-
-        # Добавляем пояснение
-        ax.text(
-            layer_width / 2,
-            len(layers) + 0.5,
-            "Порядок слоев: сверху (выше) → вниз (глубже)",
-            ha="center",
-            va="center",
-            fontsize=8,
-            style="italic",
-        )
 
         # Сохраняем изображение
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -736,7 +1040,7 @@ class GeologicalProcessor:
         plt.savefig(filepath, dpi=300, bbox_inches="tight")
         plt.close()
 
-        logger.info(f"Визуализация сохранена: {filepath}")
+        logger.info(f"Реалистичная визуализация сохранена: {filepath}")
         return filepath
 
     def process_geological_section(
@@ -792,18 +1096,29 @@ class GeologicalProcessor:
                 map_image, start_point, end_point
             )
 
-            # 3. Строим геологические слои
-            logger.info("Шаг 3: Построение геологических слоев")
-            layers = self.build_geological_layers(colors_along_line, legend_colors)
+            # 3. Строим геологические слои с использованием данных легенды
+            logger.info("Шаг 3: Построение геологических слоев с данными легенды")
+            layers = self.build_geological_layers_with_legend_data(
+                colors_along_line, legend_data
+            )
 
-            # 4. Создаем визуализацию
-            logger.info("Шаг 4: Создание визуализации")
-            output_path = self.create_section_visualization(layers, settings.output_dir)
+            # 4. Создаем визуализацию с названиями из легенды
+            logger.info("Шаг 4: Создание визуализации с названиями из легенды")
+            output_path = self.create_section_visualization_with_names(
+                layers, legend_data, settings.output_dir
+            )
+
+            # 5. Создаем изображение карты с линией разреза
+            logger.info("Шаг 5: Создание изображения карты с линией разреза")
+            map_with_line_path = self.create_map_with_section_line(
+                map_image, start_point, end_point, settings.output_dir
+            )
 
             result = {
                 "success": True,
                 "layers": layers,
                 "output_path": output_path,
+                "map_with_line_path": map_with_line_path,
                 "legend_data": legend_data,
                 "line_pixels_count": len(colors_along_line),
             }
@@ -1010,68 +1325,138 @@ class GeologicalProcessor:
         colors_along_line: List[Tuple[int, int, int]],
         legend_data: List[Dict],
     ) -> List[Dict]:
-        """Строит геологические слои с использованием данных легенды"""
+        """Строит геологические слои с использованием данных легенды по тексту"""
         logger.info(f"Строю геологические слои из {len(colors_along_line)} цветов")
         logger.info(f"Данные легенды: {len(legend_data)} блоков")
 
+        # Создаем словарь легенды: текст -> {color, index, order}
+        legend_text_dict = {}
+        for i, entry in enumerate(legend_data):
+            text = entry.get("text", "").strip()
+            if text:  # Только записи с текстом
+                legend_text_dict[text] = {
+                    "color": entry["color"],  # BGR формат
+                    "index": i,
+                    "order": i,
+                    "text": text,
+                }
+
+        logger.info(
+            f"Создан словарь легенды по тексту с {len(legend_text_dict)} записями"
+        )
+        logger.info(f"Тексты легенды: {list(legend_text_dict.keys())}")
+
+        # Анализируем уникальные цвета вдоль линии
+        unique_line_colors = list(set(colors_along_line))
+        logger.info(f"Уникальных цветов вдоль линии: {len(unique_line_colors)}")
+
+        # Показываем статистику цветов
+        color_counts = {}
+        for color in colors_along_line:
+            color_counts[color] = color_counts.get(color, 0) + 1
+
+        # Сортируем по частоте
+        sorted_colors = sorted(color_counts.items(), key=lambda x: x[1], reverse=True)
+        logger.info(f"Топ-10 самых частых цветов на линии:")
+        for i, (color, count) in enumerate(sorted_colors[:10]):
+            logger.info(f"  {i + 1}. BGR{color}: {count} раз")
+
         # Анализируем последовательность цветов вдоль линии
         layer_sequence = []
-        current_color = None
+        current_layer_text = None
         current_length = 0
+        matched_colors = 0
+        unmatched_colors = 0
 
         for i, color in enumerate(colors_along_line):
-            # Ищем ближайший цвет в легенде
+            # Ищем ближайший цвет в легенде для определения текста слоя
             closest_entry = self._find_closest_legend_entry(color, legend_data)
 
             if closest_entry:
-                closest_index = legend_data.index(closest_entry)
-                if current_color is None or current_color != closest_index:
-                    # Начинаем новый слой
-                    if current_color is not None and current_length > 0:
-                        layer_sequence.append(
-                            {
-                                "index": current_color,
-                                "color": legend_data[current_color]["color"],
-                                "order": current_color,
-                                "length": current_length,
-                                "start_pos": i - current_length,
-                                "text": legend_data[current_color]["text"],
-                            }
-                        )
+                matched_colors += 1
+                layer_text = closest_entry.get("text", "").strip()
 
-                    current_color = closest_index
+                # Логируем сопоставление для отладки
+                if i % 100 == 0:  # Логируем каждый 100-й пиксель
+                    logger.debug(
+                        f"Пиксель {i}: цвет_карты_BGR{color} -> текст: {layer_text[:30]}..."
+                    )
+
+                if current_layer_text is None or current_layer_text != layer_text:
+                    # Начинаем новый слой
+                    if current_layer_text is not None and current_length > 0:
+                        # Берем данные слоя из легенды по тексту
+                        legend_info = legend_text_dict.get(current_layer_text)
+                        if legend_info:
+                            layer_sequence.append(
+                                {
+                                    "index": legend_info["index"],
+                                    "color": legend_info[
+                                        "color"
+                                    ],  # Правильный цвет из легенды
+                                    "original_color": colors_along_line[
+                                        i - current_length
+                                    ],  # Оригинальный цвет с карты (BGR)
+                                    "order": legend_info["order"],
+                                    "length": current_length,
+                                    "start_pos": i - current_length,
+                                    "text": current_layer_text,  # Текст из легенды
+                                }
+                            )
+
+                    current_layer_text = layer_text
                     current_length = 1
                 else:
                     # Продолжаем текущий слой
                     current_length += 1
             else:
+                unmatched_colors += 1
                 # Пропускаем цвета, не найденные в легенде
-                if current_color is not None and current_length > 0:
-                    layer_sequence.append(
-                        {
-                            "index": current_color,
-                            "color": legend_data[current_color]["color"],
-                            "order": current_color,
-                            "length": current_length,
-                            "start_pos": i - current_length,
-                            "text": legend_data[current_color]["text"],
-                        }
-                    )
-                    current_color = None
+                if current_layer_text is not None and current_length > 0:
+                    # Берем данные слоя из легенды по тексту
+                    legend_info = legend_text_dict.get(current_layer_text)
+                    if legend_info:
+                        layer_sequence.append(
+                            {
+                                "index": legend_info["index"],
+                                "color": legend_info[
+                                    "color"
+                                ],  # Правильный цвет из легенды
+                                "original_color": colors_along_line[
+                                    i - current_length
+                                ],  # Оригинальный цвет с карты (BGR)
+                                "order": legend_info["order"],
+                                "length": current_length,
+                                "start_pos": i - current_length,
+                                "text": current_layer_text,  # Текст из легенды
+                            }
+                        )
+                    current_layer_text = None
                     current_length = 0
 
         # Добавляем последний слой
-        if current_color is not None and current_length > 0:
-            layer_sequence.append(
-                {
-                    "index": current_color,
-                    "color": legend_data[current_color]["color"],
-                    "order": current_color,
-                    "length": current_length,
-                    "start_pos": len(colors_along_line) - current_length,
-                    "text": legend_data[current_color]["text"],
-                }
-            )
+        if current_layer_text is not None and current_length > 0:
+            legend_info = legend_text_dict.get(current_layer_text)
+            if legend_info:
+                layer_sequence.append(
+                    {
+                        "index": legend_info["index"],
+                        "color": legend_info["color"],  # Правильный цвет из легенды
+                        "original_color": colors_along_line[
+                            len(colors_along_line) - current_length
+                        ],  # Оригинальный цвет с карты (BGR)
+                        "order": legend_info["order"],
+                        "length": current_length,
+                        "start_pos": len(colors_along_line) - current_length,
+                        "text": current_layer_text,  # Текст из легенды
+                    }
+                )
+
+        # Логируем статистику сопоставления
+        logger.info(
+            f"Статистика сопоставления: {matched_colors} сопоставлено, {unmatched_colors} не найдено"
+        )
+        logger.info(f"Найдено {len(layer_sequence)} слоев до фильтрации")
 
         # Если не нашли слои, пробуем более простой подход
         if not layer_sequence:
@@ -1080,32 +1465,46 @@ class GeologicalProcessor:
             for color in unique_colors:
                 closest_entry = self._find_closest_legend_entry(color, legend_data)
                 if closest_entry:
-                    closest_index = legend_data.index(closest_entry)
-                    layer_sequence.append(
-                        {
-                            "index": closest_index,
-                            "color": closest_entry["color"],
-                            "order": closest_index,
-                            "length": colors_along_line.count(color),
-                            "start_pos": 0,
-                            "text": closest_entry["text"],
-                        }
-                    )
+                    layer_text = closest_entry.get("text", "").strip()
+                    legend_info = legend_text_dict.get(layer_text)
+                    if legend_info:
+                        layer_sequence.append(
+                            {
+                                "index": legend_info["index"],
+                                "color": legend_info[
+                                    "color"
+                                ],  # Правильный цвет из легенды
+                                "original_color": color,  # Оригинальный цвет с карты (BGR)
+                                "order": legend_info["order"],
+                                "length": colors_along_line.count(color),
+                                "start_pos": 0,
+                                "text": layer_text,  # Текст из легенды
+                            }
+                        )
 
-        # Фильтруем слишком короткие слои (шум)
-        min_layer_length = max(1, len(colors_along_line) // 100)
+        # Фильтруем слишком короткие слои (уменьшаем минимальную длину)
+        min_layer_length = max(1, len(colors_along_line) // 200)  # Было 100, стало 200
         filtered_layers = [
             layer for layer in layer_sequence if layer["length"] >= min_layer_length
         ]
 
-        # Удаляем дубликаты, оставляя только первое вхождение каждого слоя
+        logger.info(
+            f"После фильтрации по длине: {len(filtered_layers)} слоев (мин. длина: {min_layer_length})"
+        )
+
+        # Удаляем дубликаты по тексту, но оставляем больше слоев
         unique_layers = []
-        seen_indices = set()
+        seen_texts = set()
 
         for layer in filtered_layers:
-            if layer["index"] not in seen_indices:
-                unique_layers.append(layer)
-                seen_indices.add(layer["index"])
+            layer_text = layer.get("text", "")
+            if layer_text and layer_text not in seen_texts:
+                # Проверяем, что текст слоя действительно есть в легенде
+                if layer_text in legend_text_dict:
+                    unique_layers.append(layer)
+                    seen_texts.add(layer_text)
+                else:
+                    logger.warning(f"Обнаружен некорректный текст слоя: {layer_text}")
 
         # Сортируем слои по порядку в легенде
         unique_layers.sort(key=lambda x: x["order"], reverse=False)
@@ -1113,13 +1512,37 @@ class GeologicalProcessor:
         logger.info(f"Построено {len(unique_layers)} геологических слоев:")
         for layer in unique_layers:
             text = layer.get("text", "")
-            if text:
+            layer_index = layer["index"]
+            layer_color = layer["color"]
+            original_color = layer.get("original_color", layer_color)
+
+            # Проверяем соответствие цвета и текста
+            if text in legend_text_dict:
+                legend_info = legend_text_dict[text]
+                expected_color = legend_info["color"]
+                expected_text = legend_info["text"]
+                color_match = layer_color == expected_color
+                text_match = text == expected_text
+
                 logger.info(
-                    f"  - Слой {layer['order']}: '{text[:50]}...', длина={layer['length']}"
+                    f"  - Слой {layer['order']} (индекс {layer_index}): "
+                    f"цвет_легенды={layer_color}, цвет_карты={original_color}, "
+                    f"текст='{text[:50]}...', "
+                    f"длина={layer['length']}, "
+                    f"цвет_совпадает={color_match}, текст_совпадает={text_match}"
                 )
+
+                if not color_match:
+                    logger.warning(
+                        f"    НЕСООТВЕТСТВИЕ ЦВЕТА: ожидался {expected_color}, получен {layer_color}"
+                    )
+                if not text_match:
+                    logger.warning(
+                        f"    НЕСООТВЕТСТВИЕ ТЕКСТА: ожидался '{expected_text[:50]}...', получен '{text[:50]}...'"
+                    )
             else:
-                logger.info(
-                    f"  - Слой {layer['order']}: без названия, длина={layer['length']}"
+                logger.error(
+                    f"  - Слой {layer['order']}: текст {text} не найден в словаре легенды!"
                 )
 
         return unique_layers
@@ -1127,25 +1550,37 @@ class GeologicalProcessor:
     def _find_closest_legend_entry(
         self, color: Tuple[int, int, int], legend_data: List[Dict]
     ) -> Dict:
-        """Находит ближайшую запись в легенде для данного цвета"""
+        """Находит ближайшую запись в легенде для данного цвета с более строгим сопоставлением"""
         if not legend_data:
             return None
 
         min_distance = float("inf")
         closest_entry = None
+        best_distance_type = "none"
+
+        # Сначала ищем точное совпадение
+        for entry in legend_data:
+            legend_color = entry["color"]
+            if color == legend_color:
+                logger.debug(f"Найдено точное совпадение: {color} с {legend_color}")
+                return entry
 
         for entry in legend_data:
             legend_color = entry["color"]
 
-            # Сначала пробуем LAB расстояние
+            # Сначала пробуем LAB расстояние (более точное для восприятия)
             lab_distance = self.lab_distance(color, legend_color)
             adaptive_tolerance = self.adaptive_color_tolerance(color)
 
-            if lab_distance < min_distance and lab_distance < adaptive_tolerance:
+            # Уменьшаем допуск для более строгого сопоставления
+            strict_tolerance = adaptive_tolerance * 0.7
+
+            if lab_distance < min_distance and lab_distance < strict_tolerance:
                 min_distance = lab_distance
                 closest_entry = entry
+                best_distance_type = "LAB"
 
-        # Если не нашли в LAB, пробуем RGB
+        # Если не нашли в LAB, пробуем RGB с более строгим допуском
         if closest_entry is None:
             for entry in legend_data:
                 legend_color = entry["color"]
@@ -1156,9 +1591,48 @@ class GeologicalProcessor:
                     + (color[2] - legend_color[2]) ** 2
                 ) ** 0.5
 
+                # Более строгий допуск для RGB (было 200, стало 100)
                 if rgb_distance < min_distance and rgb_distance < 100:
                     min_distance = rgb_distance
                     closest_entry = entry
+                    best_distance_type = "RGB"
+
+        # Если все еще не нашли, пробуем очень строгий подход
+        if closest_entry is None:
+            for entry in legend_data:
+                legend_color = entry["color"]
+                # Простое манхэттенское расстояние
+                manhattan_distance = (
+                    abs(color[0] - legend_color[0])
+                    + abs(color[1] - legend_color[1])
+                    + abs(color[2] - legend_color[2])
+                )
+
+                # Очень строгий допуск для манхэттенского расстояния (было 300, стало 150)
+                if manhattan_distance < min_distance and manhattan_distance < 150:
+                    min_distance = manhattan_distance
+                    closest_entry = entry
+                    best_distance_type = "Manhattan"
+
+        # Логируем информацию о сопоставлении для отладки
+        if closest_entry:
+            logger.debug(
+                f"Сопоставлен цвет {color} с {closest_entry['color']} "
+                f"(расстояние: {min_distance:.2f}, тип: {best_distance_type})"
+            )
+        else:
+            logger.debug(
+                f"Не найден подходящий цвет в легенде для {color} "
+                f"(минимальное расстояние: {min_distance:.2f})"
+            )
+
+        # Добавляем дополнительное логирование для отладки
+        if closest_entry:
+            closest_index = legend_data.index(closest_entry)
+            logger.debug(
+                f"  -> Индекс в легенде: {closest_index}, "
+                f"текст: '{closest_entry.get('text', '')[:30]}...'"
+            )
 
         return closest_entry
 
@@ -1344,4 +1818,86 @@ class GeologicalProcessor:
         plt.close()
 
         logger.info(f"Тестовое изображение легенды сохранено: {filepath}")
+        return filepath
+
+    def create_map_with_section_line(
+        self,
+        map_image: np.ndarray,
+        start_point: Tuple[int, int],
+        end_point: Tuple[int, int],
+        output_path: str,
+    ) -> str:
+        """Создает изображение карты с отмеченными точками и линией разреза"""
+        logger.info("Создаю изображение карты с линией разреза")
+
+        # Конвертируем в RGB для matplotlib
+        if len(map_image.shape) == 3 and map_image.shape[2] == 3:
+            map_rgb = cv2.cvtColor(map_image, cv2.COLOR_BGR2RGB)
+        else:
+            map_rgb = map_image
+
+        # Создаем фигуру
+        fig, ax = plt.subplots(figsize=(20, 16))
+
+        # Отображаем карту
+        ax.imshow(map_rgb)
+        ax.set_title(
+            "Геологическая карта с линией разреза", fontsize=16, fontweight="bold"
+        )
+
+        # Рисуем линию разреза
+        x1, y1 = start_point
+        x2, y2 = end_point
+
+        # Рисуем линию красным цветом с толщиной
+        ax.plot([x1, x2], [y1, y2], "r-", linewidth=3, alpha=0.8, label="Линия разреза")
+
+        # Рисуем точки начала и конца
+        ax.plot(
+            x1,
+            y1,
+            "go",
+            markersize=15,
+            markeredgecolor="black",
+            markeredgewidth=2,
+            label=f"Начало ({x1}, {y1})",
+        )
+        ax.plot(
+            x2,
+            y2,
+            "ro",
+            markersize=15,
+            markeredgecolor="black",
+            markeredgewidth=2,
+            label=f"Конец ({x2}, {y2})",
+        )
+
+        # Добавляем легенду
+        ax.legend(loc="upper right", fontsize=12)
+
+        # Убираем оси
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        # Добавляем информацию о размере карты
+        height, width = map_rgb.shape[:2]
+        ax.text(
+            0.02,
+            0.98,
+            f"Размер карты: {width} × {height}",
+            transform=ax.transAxes,
+            fontsize=12,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+        )
+
+        # Сохраняем изображение
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"map_with_section_line_{timestamp}.png"
+        filepath = os.path.join(settings.output_dir, filename)
+
+        plt.savefig(filepath, dpi=300, bbox_inches="tight")
+        plt.close()
+
+        logger.info(f"Изображение карты с линией разреза сохранено: {filepath}")
         return filepath

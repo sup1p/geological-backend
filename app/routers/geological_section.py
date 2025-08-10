@@ -66,25 +66,6 @@ async def create_geological_section(
             f"Размеры файлов: карта={len(map_content)} байт, легенда={len(legend_content)} байт"
         )
 
-        # Сохраняем файлы в папку uploads
-        logger.info("Сохраняю файлы в папку uploads...")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        # Генерируем уникальные имена файлов
-        map_filename = f"map_{timestamp}_{map_image.filename}"
-        legend_filename = f"legend_{timestamp}_{legend_image.filename}"
-
-        map_filepath = os.path.join(settings.upload_dir, map_filename)
-        legend_filepath = os.path.join(settings.upload_dir, legend_filename)
-
-        # Сохраняем файлы
-        with open(map_filepath, "wb") as f:
-            f.write(map_content)
-        with open(legend_filepath, "wb") as f:
-            f.write(legend_content)
-
-        logger.info(f"Файлы сохранены: карта={map_filepath}, легенда={legend_filepath}")
-
         # Конвертируем в numpy массивы
         map_np = np.frombuffer(map_content, np.uint8)
         legend_np = np.frombuffer(legend_content, np.uint8)
@@ -152,26 +133,30 @@ async def create_geological_section(
         logger.info("Формирую ответ...")
         layers = []
         for layer in result["layers"]:
+            # Добавляем original_color если есть, иначе используем color
+            original_color = layer.get("original_color", layer["color"])
+
             layers.append(
                 GeologicalLayer(
                     color=list(layer["color"]),
                     order=layer["order"],
                     text=layer.get("text", ""),
                     length=layer.get("length"),
+                    original_color=list(original_color),
                 )
             )
 
         response = SectionResponse(
             layers=layers,
             image_url=f"/api/v1/geological-section/download/{os.path.basename(result['output_path'])}",
+            map_with_line_url=f"/api/v1/geological-section/download/{os.path.basename(result['map_with_line_path'])}",
             message=f"Разрез построен успешно. Найдено {len(layers)} слоев.",
             uploaded_files={
-                "map_file": map_filename,
-                "legend_file": legend_filename,
-                "map_path": map_filepath,
-                "legend_path": legend_filepath,
+                "map_file": map_image.filename,
+                "legend_file": legend_image.filename,
             },
             legend_data=result.get("legend_data", []),
+            line_pixels_count=result.get("line_pixels_count", 0),
         )
 
         logger.info("=== УСПЕШНОЕ ЗАВЕРШЕНИЕ ЗАПРОСА ===")

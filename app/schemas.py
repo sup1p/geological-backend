@@ -18,6 +18,7 @@ class GeologicalLayer(BaseModel):
     order: int  # Порядок в легенде (сверху вниз)
     text: str = ""  # Описание слоя
     length: Optional[int] = None  # Длина слоя в пикселях
+    original_color: Optional[List[int]] = None  # Оригинальный цвет с карты
 
 
 class LegendEntry(BaseModel):
@@ -38,6 +39,8 @@ class LegendTestResponse(BaseModel):
 class SectionResponse(BaseModel):
     layers: List[GeologicalLayer]
     image_url: str
+    map_with_line_url: str
     message: str = "Разрез успешно построен"
     uploaded_files: dict = {}  # Информация о сохраненных файлах
     legend_data: Optional[List[Dict]] = None  # Данные легенды
+    line_pixels_count: Optional[int] = None  # Количество пикселей вдоль линии
