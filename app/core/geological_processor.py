@@ -553,7 +553,10 @@ class GeologicalProcessor:
 
         logger.info("Отображаемые слои в визуализации (сверху вниз):")
         for i, layer in enumerate(layers):
-            color = np.array(layer["color"]) / 255.0  # Нормализуем цвета
+            # Правильная нормализация цветов для matplotlib (RGB в диапазоне [0,1])
+            r, g, b = layer["color"]
+            color = (r / 255.0, g / 255.0, b / 255.0)
+
             rect = plt.Rectangle(
                 (0, current_y - layer_height),
                 layer_width,
@@ -668,7 +671,10 @@ class GeologicalProcessor:
 
         logger.info("Отображаемые слои в визуализации (сверху вниз):")
         for i, layer in enumerate(layers):
-            color = np.array(layer["color"]) / 255.0  # Нормализуем цвета
+            # Правильная нормализация цветов для matplotlib (RGB в диапазоне [0,1])
+            r, g, b = layer["color"]
+            color = (r / 255.0, g / 255.0, b / 255.0)
+
             rect = plt.Rectangle(
                 (0, current_y - layer_height),
                 layer_width,
@@ -818,82 +824,158 @@ class GeologicalProcessor:
         """Извлекает данные из легенды: названия, символы и цвета"""
         logger.info("Извлекаю данные из легенды (названия, символы, цвета)")
 
-        # Конвертируем в RGB если нужно
-        if len(legend_image.shape) == 3 and legend_image.shape[2] == 3:
-            legend_rgb = cv2.cvtColor(legend_image, cv2.COLOR_BGR2RGB)
-            logger.debug("Конвертировал изображение из BGR в RGB")
-        else:
-            legend_rgb = legend_image
-            logger.debug("Изображение уже в RGB формате")
-
-        height, width = legend_rgb.shape[:2]
+        # Используем оригинальное изображение без изменений
+        height, width = legend_image.shape[:2]
         logger.info(f"Размер легенды: {width}x{height}")
 
-        # Простой подход: делим легенду на равные блоки по вертикали
-        # и извлекаем цвет из левой части, текст из правой
-        legend_data = []
-
-        # Определяем количество блоков на основе высоты
-        # Примерно 22 блока в легенде
-        block_height = height // 22
-
-        logger.info(f"Высота блока: {block_height} пикселей")
-
-        for i in range(22):
-            start_y = i * block_height
-            end_y = min((i + 1) * block_height, height)
-
-            if end_y - start_y < 20:  # Пропускаем слишком маленькие блоки
-                continue
-
-            # Извлекаем цвет из левой части блока
-            color_region = legend_rgb[
-                start_y:end_y, : width // 6
-            ]  # Увеличиваем область для цветов
-            block_color = self._extract_dominant_color(color_region)
-
-            if block_color:
-                # Извлекаем текст из правой части блока
-                text_region = legend_rgb[
-                    start_y:end_y, width // 6 :
-                ]  # Соответственно уменьшаем область для текста
-                block_text = self._extract_text_simple(text_region)
-
-                legend_entry = {
-                    "color": block_color,
-                    "text": block_text,
-                    "y_position": start_y,
-                    "height": end_y - start_y,
-                }
-
-                legend_data.append(legend_entry)
-                logger.info(
-                    f"Блок {len(legend_data)}: цвет={block_color}, текст='{block_text[:50]}...'"
-                )
+        # Находим контуры цветных блоков
+        legend_data = self._find_color_blocks(legend_image)
 
         logger.info(f"Извлечено {len(legend_data)} блоков легенды")
+
+        # Выводим краткую статистику всех блоков
+        logger.info("=== СТАТИСТИКА ИЗВЛЕЧЕННЫХ БЛОКОВ ===")
+        logger.info(f"Всего блоков: {len(legend_data)}")
+
+        # Подсчитываем блоки с текстом
+        blocks_with_text = sum(
+            1 for entry in legend_data if entry.get("text", "").strip()
+        )
+        logger.info(f"Блоков с текстом: {blocks_with_text}")
+        logger.info(f"Блоков без текста: {len(legend_data) - blocks_with_text}")
+
+        # Показываем диапазон координат
+        if legend_data:
+            y_coords = [entry["y"] for entry in legend_data]
+            logger.info(f"Диапазон Y-координат: {min(y_coords)} - {max(y_coords)}")
+
         return legend_data
 
-    def _extract_dominant_color(self, color_region: np.ndarray) -> Tuple[int, int, int]:
-        """Извлекает доминирующий цвет из области - простая логика как в тексте"""
-        # Берем пиксель не в центре, а чуть левее от центра, чтобы избежать символов
-        height, width = color_region.shape[:2]
-        center_y = height // 2
-        # Смещаемся на 1/4 от центра влево
-        center_x = width // 4
+    def _find_color_blocks(self, legend_image: np.ndarray) -> List[Dict]:
+        """Находит контуры цветных блоков в легенде"""
+        height, width = legend_image.shape[:2]
 
-        # Берем цвет пикселя
-        pixel_color = color_region[center_y, center_x]
-        r, g, b = int(pixel_color[0]), int(pixel_color[1]), int(pixel_color[2])
+        # Конвертируем в градации серого для поиска контуров
+        gray = cv2.cvtColor(legend_image, cv2.COLOR_BGR2GRAY)
 
-        return (r, g, b)
+        # Бинаризация с инверсией для выделения не-белых областей
+        _, binary = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY_INV)
 
-    def _extract_text_simple(self, text_region: np.ndarray) -> str:
-        """Простое извлечение текста"""
+        # Находим контуры
+        contours, _ = cv2.findContours(
+            binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+
+        logger.info(f"Найдено {len(contours)} контуров")
+
+        blocks = []
+        filtered_count = 0
+
+        for i, contour in enumerate(contours):
+            # Получаем прямоугольную область контура
+            x, y, w, h = cv2.boundingRect(contour)
+
+            # Ищем только основные цветные блоки легенды
+            # Основные блоки обычно имеют размеры ~190x100 пикселей
+            # и находятся в левой части изображения
+
+            # Фильтруем слишком маленькие области
+            if w < 50 or h < 50:
+                filtered_count += 1
+                continue
+
+            # Фильтруем слишком большие области
+            if w > width * 0.5 or h > height * 0.2:
+                filtered_count += 1
+                continue
+
+            # Основные блоки должны быть в левой части (первые 30% ширины)
+            if x > width * 0.3:
+                filtered_count += 1
+                continue
+
+            # Блоки должны иметь примерно прямоугольную форму
+            aspect_ratio = w / h
+            if aspect_ratio < 1.0 or aspect_ratio > 3.0:
+                filtered_count += 1
+                continue
+
+            # Извлекаем цвет из блока
+            block_color = self._extract_color_from_block(legend_image, x, y, w, h)
+
+            if block_color:
+                # Извлекаем текст для этого блока
+                block_text = self._extract_text_for_block(
+                    legend_image, x, y, w, h, width
+                )
+
+                block_entry = {
+                    "color": block_color,
+                    "text": block_text,
+                    "x": x,
+                    "y": y,
+                    "width": w,
+                    "height": h,
+                    "y_position": y,
+                }
+
+                blocks.append(block_entry)
+
+        logger.info(
+            f"Отфильтровано контуров: {filtered_count}, найдено основных блоков: {len(blocks)}"
+        )
+
+        # Сортируем блоки по Y-координате (сверху вниз)
+        blocks.sort(key=lambda x: x["y"])
+
+        return blocks
+
+    def _extract_color_from_block(
+        self, legend_image: np.ndarray, x: int, y: int, w: int, h: int
+    ) -> Tuple[int, int, int]:
+        """Извлекает цвет из блока по одному пикселю"""
+        # Выбираем точку в левом краю блока (избегаем центр со символами)
+        pixel_x = x + w // 4  # Четверть от ширины от левого края
+        pixel_y = y + h // 2  # Центр по высоте
+
+        # Проверяем, что точка внутри изображения
+        if pixel_x >= legend_image.shape[1] or pixel_y >= legend_image.shape[0]:
+            pixel_x = x + 10  # Отступ от левого края
+            pixel_y = y + h // 2
+
+        # Получаем цвет напрямую из изображения без изменений
+        pixel_color = legend_image[pixel_y, pixel_x]
+        b, g, r = int(pixel_color[0]), int(pixel_color[1]), int(pixel_color[2])
+
+        # Возвращаем как есть (BGR формат)
+        color = (b, g, r)
+
+        # Отладочная информация
+        logger.debug(
+            f"Извлечен цвет из левого края блока ({pixel_x}, {pixel_y}): BGR({b}, {g}, {r})"
+        )
+
+        return color
+
+    def _extract_text_for_block(
+        self, legend_image: np.ndarray, x: int, y: int, w: int, h: int, total_width: int
+    ) -> str:
+        """Извлекает текст для блока"""
+        # Вырезаем область справа от блока
+        text_start_x = x + w + 10  # 10 пикселей отступ от блока
+        text_end_x = total_width
+
+        # Проверяем границы
+        if text_start_x >= total_width:
+            return ""
+
+        # Вырезаем текстовую область
+        text_region = legend_image[y : y + h, text_start_x:text_end_x]
+
         # Конвертируем в оттенки серого
-        text_gray = cv2.cvtColor(text_region, cv2.COLOR_RGB2GRAY)
+        text_gray = cv2.cvtColor(text_region, cv2.COLOR_BGR2GRAY)
 
-        # Применяем бинаризацию
+        # Применяем бинаризацию OTSU
         _, text_binary = cv2.threshold(
             text_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
         )
@@ -901,7 +983,7 @@ class GeologicalProcessor:
         try:
             import pytesseract
 
-            # Пробуем извлечь текст
+            # OCR с Tesseract
             text = pytesseract.image_to_string(
                 text_binary, lang="rus", config="--psm 6"
             )
@@ -1145,21 +1227,39 @@ class GeologicalProcessor:
         current_y = len(legend_data)  # Начинаем сверху
 
         logger.info("Отображаемые блоки легенды (сверху вниз):")
+
+        # Собираем информацию о всех блоках в один список
+        blocks_info = []
         for i, entry in enumerate(legend_data):
-            color = np.array(entry["color"]) / 255.0  # Нормализуем цвета
+            text = entry.get("text", "")
+            # Обрезаем текст до 10 символов
+            short_text = text[:10] + "..." if len(text) > 10 else text
+            color = entry["color"]
+            y_pos = current_y - layer_height
+            coords = (entry.get("x", "N/A"), entry.get("y", "N/A"))
+
+            blocks_info.append(
+                f"{i + 1}. '{short_text}': BGR{color}, y={y_pos:.1f}, coords{coords}"
+            )
+
+            # Отладочная информация о цвете
+            b, g, r = color
+            logger.debug(f"Блок {i + 1}: BGR({b}, {g}, {r}) -> RGB({r}, {g}, {b})")
+
+            # Рисуем блок (конвертируем BGR в RGB для matplotlib)
+            color_normalized = (r / 255.0, g / 255.0, b / 255.0)
+
             rect = plt.Rectangle(
                 (0, current_y - layer_height),
                 layer_width,
                 layer_height,
-                facecolor=color,
+                facecolor=color_normalized,
                 edgecolor="black",
                 linewidth=1,
             )
             ax.add_patch(rect)
 
             # Добавляем подпись блока
-            text = entry.get("text", "")
-
             # Формируем текст для отображения
             if text:
                 layer_text = text
@@ -1170,13 +1270,14 @@ class GeologicalProcessor:
             if len(layer_text) > 80:
                 layer_text = layer_text[:77] + "..."
 
-            # Добавляем информацию о цвете
-            color_info = f"RGB: {entry['color']}"
+            # Добавляем информацию о цвете и координатах
+            color_info = f"BGR: {entry['color']}"
+            coord_info = f"Коорд: ({entry.get('x', 'N/A')}, {entry.get('y', 'N/A')})"
 
-            # Размещаем текст в две строки
+            # Размещаем текст в три строки
             ax.text(
                 layer_width / 2,
-                current_y - layer_height / 2 + 0.3,
+                current_y - layer_height / 2 + 0.4,
                 layer_text,
                 ha="center",
                 va="center",
@@ -1187,7 +1288,7 @@ class GeologicalProcessor:
 
             ax.text(
                 layer_width / 2,
-                current_y - layer_height / 2 - 0.3,
+                current_y - layer_height / 2,
                 color_info,
                 ha="center",
                 va="center",
@@ -1196,17 +1297,29 @@ class GeologicalProcessor:
                 style="italic",
             )
 
-            logger.info(
-                f"  - {layer_text}: цвет {entry['color']}, позиция y={current_y - layer_height}"
+            ax.text(
+                layer_width / 2,
+                current_y - layer_height / 2 - 0.4,
+                coord_info,
+                ha="center",
+                va="center",
+                fontsize=7,
+                color="black",
+                style="italic",
             )
 
             current_y -= layer_height
+
+        # Выводим один общий лог со всеми блоками
+        logger.info("Блоки: " + " | ".join(blocks_info))
 
         ax.set_xlim(0, layer_width)
         ax.set_ylim(0, len(legend_data))
         ax.set_aspect("auto")
         ax.set_title(
-            "Тест извлечения данных из легенды", fontsize=16, fontweight="bold"
+            "Тест новой логики извлечения данных из легенды (контуры блоков)",
+            fontsize=16,
+            fontweight="bold",
         )
         ax.set_xlabel("")
         ax.set_ylabel("Порядок блоков (сверху вниз)")

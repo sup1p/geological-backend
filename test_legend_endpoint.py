@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Тестовый скрипт для проверки эндпоинта тестирования легенды
+Тестовый скрипт для проверки новой логики извлечения данных из легенды
 """
 
 import requests
@@ -8,7 +8,7 @@ import json
 
 
 def test_legend_endpoint():
-    """Тестирует новый эндпоинт /test-legend"""
+    """Тестирует новый эндпоинт /test-legend с новой логикой"""
 
     url = "http://localhost:8000/api/v1/geological-section/test-legend"
 
@@ -19,7 +19,7 @@ def test_legend_endpoint():
         with open(legend_file_path, "rb") as f:
             files = {"legend_image": f}
 
-            print("Отправляю запрос на тестирование легенды...")
+            print("Отправляю запрос на тестирование новой логики легенды...")
             response = requests.post(url, files=files)
 
             if response.status_code == 200:
@@ -30,16 +30,49 @@ def test_legend_endpoint():
                 print(f"URL изображения: {result['image_url']}")
                 print(f"Сохраненный файл: {result['uploaded_file']}")
 
-                # Показываем первые несколько блоков
-                print("\nПервые 5 блоков легенды:")
-                for i, block in enumerate(result["legend_data"][:5]):
-                    text = block.get("text", "")
-                    if text:
-                        print(f"  {i + 1}. Цвет: {block.get('color', [])}")
-                        print(f"     Текст: {text[:50]}...")
-                    else:
-                        print(f"  {i + 1}. Цвет: {block.get('color', [])}")
-                        print(f"     Текст: не извлечен")
+                # Показываем полную структуру блоков
+                print("\n=== ПОЛНАЯ СТРУКТУРА ИЗВЛЕЧЕННЫХ БЛОКОВ ===")
+                for i, block in enumerate(result["legend_data"]):
+                    print(f"\nБлок {i + 1}:")
+                    print(
+                        f"  - Координаты: x={block.get('x', 'N/A')}, y={block.get('y', 'N/A')}, w={block.get('width', 'N/A')}, h={block.get('height', 'N/A')}"
+                    )
+                    print(f"  - Цвет: BGR{block.get('color', [])}")
+                    print(f"  - Текст: '{block.get('text', 'не извлечен')}'")
+                    print(f"  - Позиция Y: {block.get('y_position', 'N/A')}")
+
+                # Показываем статистику
+                print(f"\n=== СТАТИСТИКА ===")
+                print(f"Всего блоков: {len(result['legend_data'])}")
+
+                # Подсчитываем блоки с текстом
+                blocks_with_text = sum(
+                    1
+                    for block in result["legend_data"]
+                    if block.get("text", "").strip()
+                )
+                print(f"Блоков с текстом: {blocks_with_text}")
+                print(
+                    f"Блоков без текста: {len(result['legend_data']) - blocks_with_text}"
+                )
+
+                # Показываем уникальные цвета
+                unique_colors = set()
+                for block in result["legend_data"]:
+                    color = block.get("color")
+                    if color:
+                        unique_colors.add(tuple(color))
+                print(f"Уникальных цветов: {len(unique_colors)}")
+
+                # Показываем диапазон размеров блоков
+                if result["legend_data"]:
+                    widths = [block.get("width", 0) for block in result["legend_data"]]
+                    heights = [
+                        block.get("height", 0) for block in result["legend_data"]
+                    ]
+                    print(
+                        f"Размеры блоков: ширина {min(widths)}-{max(widths)}px, высота {min(heights)}-{max(heights)}px"
+                    )
 
             else:
                 print(f"❌ Ошибка: {response.status_code}")

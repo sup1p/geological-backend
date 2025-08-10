@@ -223,9 +223,8 @@ async def test_legend_extraction(
                 status_code=400, detail="Не удалось прочитать изображение легенды"
             )
 
-        # Сохраняем файл легенды
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        legend_filename = f"test_legend_{timestamp}_{legend_image.filename}"
+        # Сохраняем файл легенды с оригинальным именем
+        legend_filename = legend_image.filename
         legend_filepath = os.path.join(settings.upload_dir, legend_filename)
 
         with open(legend_filepath, "wb") as f:
