@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 pydantic
-opencv-python
+opencv-python-headless
 numpy
 Pillow
 scikit-learn
@@ -10,3 +10,10 @@ python-multipart
 requests
 pydantic-settings
 pytesseract
+rapidfuzz
+python-jose[cryptography]
+passlib[bcrypt]==1.7.4
+sqlalchemy[asyncio]
+asyncpg
+google-cloud-storage
+pydantic_ai

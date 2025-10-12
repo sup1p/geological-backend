@@ -21,6 +21,8 @@ wheels/
 *.egg
 MANIFEST
 
+output
+
 # Virtual environments
 venv/
 .env
@@ -63,3 +65,5 @@ test_images/
 .env.production.local
 
 .cursorrules
+
+*.json
