@@ -42,6 +42,9 @@ COPY ./geologica-474819-ed167a0bd70c.json .
 # Copy application code (this layer changes most often, so it's last)
 COPY . .
 
+# Create necessary directories for file operations
+RUN mkdir -p /app/outputs /app/uploads
+
 # Change ownership to appuser
 RUN chown -R appuser:appuser /app
 
