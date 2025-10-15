@@ -36,7 +36,7 @@ app.add_middleware(
 )
 
 # Подключение роутеров
-app.include_router(geological_section.router, prefix="/api/v1")
-app.include_router(strato_ai.router, prefix="/api/v1")
+app.include_router(geological_section.router, prefix="/api")
+app.include_router(strato_ai.router, prefix="/api")
 app.include_router(auth.router)
-app.include_router(user_sections.router, prefix="/api/v1")
+app.include_router(user_sections.router, prefix="/api")

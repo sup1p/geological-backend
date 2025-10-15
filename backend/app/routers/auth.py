@@ -7,9 +7,9 @@ from app.services.auth import authenticate_user, create_user, create_access_toke
 from app.schemas import UserCreate, Token, User, RefreshTokenRequest
 from app.core.config import settings
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
 
 @router.post("/register", response_model=User)
