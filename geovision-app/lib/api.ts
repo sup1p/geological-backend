@@ -1,6 +1,10 @@
 // API client for GeoVision backend
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:8000"
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL!
+
+if (!API_BASE_URL) {
+  throw new Error("NEXT_PUBLIC_BACKEND_API_URL is not defined in environment variables")
+}
 
 export interface UserSection {
   id: number
@@ -165,7 +169,7 @@ export async function createGeologicalSection(
   formData.append("end_x", endX.toString())
   formData.append("end_y", endY.toString())
 
-  const response = await fetch(`${API_BASE_URL}/api/v1/geological-section/create-enhanced-section`, {
+  const response = await fetch(`${API_BASE_URL}/api/geological-section/create-enhanced-section`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -201,7 +205,7 @@ export async function getUserSections(page = 1, pageSize = 10): Promise<Paginate
     throw new Error("Authentication required")
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/v1/sections/?page=${page}&page_size=${pageSize}`, {
+  const response = await fetch(`${API_BASE_URL}/api/sections/?page=${page}&page_size=${pageSize}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -221,7 +225,7 @@ export async function getUserSection(sectionId: number): Promise<UserSection> {
     throw new Error("Authentication required")
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/v1/sections/${sectionId}`, {
+  const response = await fetch(`${API_BASE_URL}/api/sections/${sectionId}`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -241,7 +245,7 @@ export async function deleteUserSection(sectionId: number): Promise<void> {
     throw new Error("Authentication required")
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/v1/sections/${sectionId}`, {
+  const response = await fetch(`${API_BASE_URL}/api/sections/${sectionId}`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -348,7 +352,7 @@ export function createWebSocketConnection(token: string): WebSocket {
   }
   
   const wsUrl = API_BASE_URL.replace("http", "ws")
-  const websocketUrl = `${wsUrl}/api/v1/ws/strato?token=${encodeURIComponent(token)}`
+  const websocketUrl = `${wsUrl}/api/ws/strato?token=${encodeURIComponent(token)}`
   
   console.log("Creating WebSocket connection to:", websocketUrl.replace(token, '***'))
   

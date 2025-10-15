@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.agent import ask_with_context
 from app.core.database import get_db
-from app.services.auth import verify_token, get_user_by_username
+from app.services.auth import verify_token, get_user_by_email
 
 import asyncio
 
@@ -21,7 +21,8 @@ async def authenticate_websocket_user(token: str, db: AsyncSession):
     
     try:
         token_data = verify_token(token, credentials_exception)
-        user = await get_user_by_username(db, username=token_data.username)
+        # token_data.username actually contains email now
+        user = await get_user_by_email(db, email=token_data.username)
         if user is None:
             raise credentials_exception
         return user
@@ -47,15 +48,18 @@ async def websocket_endpoint(websocket: WebSocket):
         db_gen = get_db()
         db = await db_gen.__anext__()
         
+        # First accept the connection, then authenticate
+        await websocket.accept()
+        
         # Authenticate user
         user = await authenticate_websocket_user(token, db)
         if not user:
             print(f"WebSocket authentication failed for token: {token[:10]}...")
-            await websocket.close(code=4001, reason="Invalid authentication token")
+            await websocket.send_text('{"error": "Authentication failed"}')
+            await websocket.close(code=1008, reason="Authentication failed")
             return
         
         print(f"User {user.id} connected via WebSocket")
-        await websocket.accept()
         
         while True:
             # Receive user message
@@ -77,7 +81,7 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"WebSocket error for user {user.id if user else 'Unknown'}: {str(e)}")
         try:
             await websocket.close(code=1011, reason="Internal server error")
-        except:
+        except Exception:
             pass
     finally:
         # Close database session

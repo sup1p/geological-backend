@@ -96,15 +96,16 @@ async def create_user(db: AsyncSession, user: UserCreate):
 def verify_token(token: str, credentials_exception, expected_token_type: str = "access"):
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        username: str = payload.get("sub")
+        email: str = payload.get("sub")  # Now contains email instead of username
         token_type: str = payload.get("token_type")
         
-        if username is None:
+        if email is None:
             raise credentials_exception
         if token_type != expected_token_type:
             raise credentials_exception
             
-        token_data = TokenData(username=username)
+        # Store email in username field for backward compatibility with TokenData schema
+        token_data = TokenData(username=email)
     except JWTError:
         raise credentials_exception
     return token_data

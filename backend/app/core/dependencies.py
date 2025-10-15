@@ -28,9 +28,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    from app.services.auth import verify_token, get_user_by_username
+    from app.services.auth import verify_token, get_user_by_email
     token_data = verify_token(token, credentials_exception)
-    user = await get_user_by_username(db, username=token_data.username)
+    # token_data.username actually contains email now
+    user = await get_user_by_email(db, email=token_data.username)
     if user is None:
         raise credentials_exception
     return user

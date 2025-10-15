@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.services.auth import authenticate_user, create_user, create_access_token, create_refresh_token, get_user_by_email, get_user_by_username, verify_refresh_token
+from app.services.auth import authenticate_user, create_user, create_access_token, create_refresh_token, get_user_by_email, verify_refresh_token
 from app.schemas import UserCreate, Token, User, RefreshTokenRequest
 from app.core.config import settings
 
@@ -36,16 +36,16 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Create access token
+    # Create access token using email as subject (since we authenticate by email)
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
     
     # Create refresh token
     refresh_token_expires = timedelta(days=settings.refresh_token_expire_days)
     refresh_token = create_refresh_token(
-        data={"sub": user.username}, expires_delta=refresh_token_expires
+        data={"sub": user.email}, expires_delta=refresh_token_expires
     )
     
     return {
@@ -69,21 +69,21 @@ async def refresh_access_token(
     # Verify refresh token
     token_data = verify_refresh_token(refresh_request.refresh_token, credentials_exception)
     
-    # Get user from database
-    user = await get_user_by_username(db, username=token_data.username)
+    # Get user from database (token_data.username actually contains email)
+    user = await get_user_by_email(db, email=token_data.username)
     if user is None:
         raise credentials_exception
     
-    # Create new access token
+    # Create new access token using email
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
     
     # Create new refresh token
     refresh_token_expires = timedelta(days=settings.refresh_token_expire_days)
     new_refresh_token = create_refresh_token(
-        data={"sub": user.username}, expires_delta=refresh_token_expires
+        data={"sub": user.email}, expires_delta=refresh_token_expires
     )
     
     return {
@@ -106,7 +106,8 @@ async def get_current_user_info(
     
     from app.services.auth import verify_token
     token_data = verify_token(token, credentials_exception)
-    user = await get_user_by_username(db, username=token_data.username)
+    # token_data.username actually contains email now
+    user = await get_user_by_email(db, email=token_data.username)
     
     if user is None:
         raise credentials_exception
