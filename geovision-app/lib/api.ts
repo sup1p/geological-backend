@@ -78,7 +78,7 @@ export async function refreshAccessToken(): Promise<Token> {
     throw new Error("No refresh token available")
   }
 
-  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+  const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -256,7 +256,7 @@ export async function deleteUserSection(sectionId: number): Promise<void> {
 // Authentication functions
 export async function register(userData: UserCreate): Promise<User> {
   try {
-    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -284,7 +284,7 @@ export async function login(credentials: LoginCredentials): Promise<{ token: Tok
     formData.append("username", credentials.username)
     formData.append("password", credentials.password)
 
-    const response = await fetch(`${API_BASE_URL}/auth/token`, {
+    const response = await fetch(`${API_BASE_URL}/api/auth/token`, {
       method: "POST",
       body: formData,
     })
@@ -306,7 +306,7 @@ export async function login(credentials: LoginCredentials): Promise<{ token: Tok
     storeTokens(tokenData.access_token, tokenData.refresh_token)
     
     // Get user data using the token
-    const userResponse = await fetch(`${API_BASE_URL}/auth/me`, {
+    const userResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
       },
