@@ -48,10 +48,10 @@ export function Header({ onMenuClick }: HeaderProps) {
             Pricing
           </Link>
           <Link
-            href="/contact"
+            href="/about"
             className="text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
           >
-            Contact us
+            About us
           </Link>
           <Link
             href="/how-it-works"

@@ -24,14 +24,34 @@ export default function AboutPage() {
             subsurface structures.
           </p>
 
-          <h2 className="text-2xl font-semibold mt-8 mb-4">Contact Us</h2>
+          <h2 className="text-2xl font-semibold mt-8 mb-4">Author & Creator</h2>
           <p className="text-muted-foreground leading-relaxed">
-            Have questions or want to learn more? Visit our{" "}
-            <a href="/contact" className="text-primary hover:underline">
-              contact page
-            </a>{" "}
-            to get in touch with our team.
+            The idea for GeoVision was conceived by <strong>Amangeldi Fariza Gadyletkyzy</strong> (Amangeldi F. G.), 
+            who envisioned a revolutionary approach to geological analysis through AI technology.
           </p>
+
+          <h2 className="text-2xl font-semibold mt-8 mb-4">Follow Us</h2>
+          <p className="text-muted-foreground leading-relaxed">
+            Stay updated with our latest developments and insights:
+          </p>
+          <div className="flex flex-col gap-2 mt-4">
+            <a 
+              href="https://instagram.com/geovision.kz" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-primary hover:underline flex items-center gap-2"
+            >
+              📷 @geovision.kz
+            </a>
+            <a 
+              href="https://instagram.com/geovision.ai" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-primary hover:underline flex items-center gap-2"
+            >
+              📷 @geovision.ai
+            </a>
+          </div>
         </div>
       </div>
     </main>
