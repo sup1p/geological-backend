@@ -79,8 +79,11 @@ export function storeTokens(accessToken: string, refreshToken: string): void {
 export async function refreshAccessToken(): Promise<Token> {
   const refreshToken = getRefreshToken()
   if (!refreshToken) {
+    console.error("[refreshAccessToken] No refresh token available")
     throw new Error("No refresh token available")
   }
+
+  console.log("[refreshAccessToken] Making refresh request with token:", refreshToken.substring(0, 20) + "...")
 
   const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
     method: "POST",
@@ -91,6 +94,7 @@ export async function refreshAccessToken(): Promise<Token> {
   })
 
   if (!response.ok) {
+    console.error("[refreshAccessToken] Refresh failed:", response.status, response.statusText)
     // If refresh fails, remove tokens and throw error
     if (typeof window !== "undefined") {
       localStorage.removeItem("auth_token")
@@ -100,6 +104,7 @@ export async function refreshAccessToken(): Promise<Token> {
   }
 
   const tokenData = await response.json()
+  console.log("[refreshAccessToken] Refresh successful, storing new tokens")
   storeTokens(tokenData.access_token, tokenData.refresh_token)
   return tokenData
 }
@@ -125,18 +130,24 @@ export async function authenticatedFetch(
 
   // If token expired, try to refresh and retry
   if (response.status === 401) {
+    console.log("[authenticatedFetch] 401 received, attempting token refresh...")
     try {
       await refreshAccessToken()
       const newToken = getAuthToken()
       
       if (newToken) {
+        console.log("[authenticatedFetch] Token refreshed successfully, retrying request")
         const retryHeaders = {
           ...options.headers,
           Authorization: `Bearer ${newToken}`,
         }
         return await fetch(url, { ...options, headers: retryHeaders })
+      } else {
+        console.error("[authenticatedFetch] No new token after refresh")
+        throw new Error("Authentication failed")
       }
     } catch (refreshError) {
+      console.error("[authenticatedFetch] Token refresh failed:", refreshError)
       // Refresh failed, redirect to login or throw error
       throw new Error("Authentication failed")
     }
@@ -155,11 +166,6 @@ export async function createGeologicalSection(
   endX: number,
   endY: number,
 ): Promise<Blob> {
-  const token = getAuthToken()
-  if (!token) {
-    throw new Error("Authentication required")
-  }
-
   const formData = new FormData()
   formData.append("map_image", mapImage)
   formData.append("legend_image", legendImage)
@@ -169,47 +175,46 @@ export async function createGeologicalSection(
   formData.append("end_x", endX.toString())
   formData.append("end_y", endY.toString())
 
-  const response = await fetch(`${API_BASE_URL}/api/geological-section/create-enhanced-section`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    body: formData,
-  })
+  try {
+    const response = await authenticatedFetch(`${API_BASE_URL}/api/geological-section/create-enhanced-section`, {
+      method: "POST",
+      body: formData,
+    })
 
-  if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-    try {
-      const errorText = await response.text()
-      if (errorText) {
-        errorMessage = errorText
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`
+      try {
+        const errorText = await response.text()
+        if (errorText) {
+          errorMessage = errorText
+        }
+      } catch (e) {
+        console.error('Error reading response:', e)
       }
-    } catch (e) {
-      console.error('Error reading response:', e)
+      
+      throw new Error(`Failed to create section: ${errorMessage}`)
     }
-    
-    if (response.status === 401) {
-      throw new Error("Authentication failed. Please log in again.")
-    }
-    
-    throw new Error(`Failed to create section: ${errorMessage}`)
-  }
 
-  return response.blob()
+    return response.blob()
+  } catch (error) {
+    // If authenticatedFetch throws "Authentication failed", it means refresh also failed
+    if (error instanceof Error && error.message === "Authentication failed") {
+      // Clear tokens and show unauthorized error
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("auth_token")
+        localStorage.removeItem("refresh_token")
+        localStorage.removeItem("user_data")
+      }
+      throw new Error("UNAUTHORIZED: Your session has expired. Please log in again.")
+    }
+    // Re-throw other errors as-is
+    throw error
+  }
 }
 
 // Get user sections with pagination
 export async function getUserSections(page = 1, pageSize = 10): Promise<PaginatedSections> {
-  const token = getAuthToken()
-  if (!token) {
-    throw new Error("Authentication required")
-  }
-
-  const response = await fetch(`${API_BASE_URL}/api/sections/?page=${page}&page_size=${pageSize}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/sections/?page=${page}&page_size=${pageSize}`)
 
   if (!response.ok) {
     throw new Error("Failed to fetch sections")
@@ -220,16 +225,7 @@ export async function getUserSections(page = 1, pageSize = 10): Promise<Paginate
 
 // Get specific user section
 export async function getUserSection(sectionId: number): Promise<UserSection> {
-  const token = getAuthToken()
-  if (!token) {
-    throw new Error("Authentication required")
-  }
-
-  const response = await fetch(`${API_BASE_URL}/api/sections/${sectionId}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/sections/${sectionId}`)
 
   if (!response.ok) {
     throw new Error("Failed to fetch section")
@@ -240,16 +236,8 @@ export async function getUserSection(sectionId: number): Promise<UserSection> {
 
 // Delete user section
 export async function deleteUserSection(sectionId: number): Promise<void> {
-  const token = getAuthToken()
-  if (!token) {
-    throw new Error("Authentication required")
-  }
-
-  const response = await fetch(`${API_BASE_URL}/api/sections/${sectionId}`, {
+  const response = await authenticatedFetch(`${API_BASE_URL}/api/sections/${sectionId}`, {
     method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
   })
 
   if (!response.ok) {
@@ -346,7 +334,11 @@ export async function logout(): Promise<void> {
 }
 
 // WebSocket connection for AI chatbot
-export function createWebSocketConnection(token: string): WebSocket {
+export function createWebSocketConnection(
+  token: string,
+  onUnauthorized?: () => void,
+  onTokenRefreshed?: (newToken: string) => void
+): WebSocket {
   if (!token) {
     throw new Error("Token is required for WebSocket connection")
   }
@@ -356,5 +348,71 @@ export function createWebSocketConnection(token: string): WebSocket {
   
   console.log("Creating WebSocket connection to:", websocketUrl.replace(token, '***'))
   
-  return new WebSocket(websocketUrl)
+  const ws = new WebSocket(websocketUrl)
+  
+  // Override the onmessage handler to check for auth error messages
+  ws.addEventListener('message', async (event) => {
+    let messageData = event.data
+    
+    // Try to parse as JSON to check for error messages
+    try {
+      const parsed = JSON.parse(messageData)
+      if (parsed.error === "Authentication failed") {
+        console.warn("[WebSocket] Authentication failed, attempting token refresh...")
+        
+        try {
+          // Try to refresh the token
+          const newTokenData = await refreshAccessToken()
+          console.log("[WebSocket] Token refreshed successfully")
+          
+          // Notify that token was refreshed (so connection can be recreated)
+          if (onTokenRefreshed) {
+            onTokenRefreshed(newTokenData.access_token)
+          }
+          
+          // Close current connection so it can be recreated with new token
+          ws.close(1000, 'Token refreshed')
+          return
+        } catch (refreshError) {
+          console.error("[WebSocket] Token refresh failed:", refreshError)
+          
+          // Clear auth data and show unauthorized error
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("auth_token")
+            localStorage.removeItem("refresh_token")
+            localStorage.removeItem("user_data")
+          }
+          
+          if (onUnauthorized) {
+            onUnauthorized()
+          }
+          
+          ws.close(4001, 'Unauthorized - refresh failed')
+          return
+        }
+      }
+    } catch (parseError) {
+      // Not JSON or different message format, check string content
+      if (messageData === 'unauthorized' || 
+          messageData.includes('unauthorized') || 
+          messageData.includes('Unauthorized')) {
+        console.warn("[WebSocket] Unauthorized message received, closing connection")
+        
+        if (onUnauthorized) {
+          onUnauthorized()
+        }
+        
+        // Clear auth data and close connection
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("auth_token")
+          localStorage.removeItem("refresh_token")
+          localStorage.removeItem("user_data")
+        }
+        ws.close(4001, 'Unauthorized')
+        return
+      }
+    }
+  })
+  
+  return ws
 }

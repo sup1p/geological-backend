@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { createGeologicalSection } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { ImagePointSelector } from "./image-point-selector"
+import { UnauthorizedError } from "./ui/unauthorized-error"
 
 interface UploadModalProps {
   isOpen: boolean
@@ -27,6 +28,7 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
   const [startPoint, setStartPoint] = useState<Point | null>(null)
   const [endPoint, setEndPoint] = useState<Point | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [showUnauthorizedError, setShowUnauthorizedError] = useState(false)
 
   const mapInputRef = useRef<HTMLInputElement>(null)
   const legendInputRef = useRef<HTMLInputElement>(null)
@@ -102,9 +104,22 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
       onClose()
     } catch (error) {
       console.error("[v0] Upload error:", error)
+      
+      const errorMessage = error instanceof Error ? error.message : "Failed to create geological section"
+      
+      // Check if it's an unauthorized error (only after refresh attempts failed)
+      if (errorMessage.includes("UNAUTHORIZED")) {
+        console.log("[Upload] Token refresh failed, showing unauthorized error")
+        setShowUnauthorizedError(true)
+        return
+      }
+      
+      // Log other errors for debugging
+      console.log("[Upload] Non-auth error:", errorMessage)
+      
       toast({
         title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to create geological section",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -113,6 +128,19 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
   }
 
   if (!isOpen) return null
+
+  // Show unauthorized error overlay if needed
+  if (showUnauthorizedError) {
+    return (
+      <UnauthorizedError 
+        message="Your session has expired. Please log in again to create geological sections."
+        onClose={() => {
+          setShowUnauthorizedError(false)
+          handleClose()
+        }}
+      />
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

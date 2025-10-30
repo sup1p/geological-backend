@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str
     access_token_expire_minutes: int
-    refresh_token_expire_days: int = 7  # Default: 7 days
+    refresh_token_expire_days: int = 100  # Default: 100 days
     
     # gcp
     gcs_bucket_name: str

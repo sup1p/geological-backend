@@ -75,6 +75,10 @@ async def login_for_access_token(
         "refresh_token": refresh_token,
         "token_type": "bearer"
     }
+    
+@app.get("/")
+async def health_check():
+    return {"status": "ok"}
 
 # Подключение роутеров
 app.include_router(geological_section.router, prefix="/api")

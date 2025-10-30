@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { createWebSocketConnection } from "@/lib/api"
+import { UnauthorizedError } from "@/components/ui/unauthorized-error"
 
 // Loading dots animation component
 function LoadingDots() {
@@ -107,6 +108,8 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
   const [isConnected, setIsConnected] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false)
+  const [showUnauthorizedError, setShowUnauthorizedError] = useState(false)
+  const [tokenRefreshTrigger, setTokenRefreshTrigger] = useState(0) // Trigger for reconnection after token refresh
   const wsRef = useRef<WebSocket | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -122,7 +125,23 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
       setIsConnecting(true)
 
       try {
-        const ws = createWebSocketConnection(token)
+        const ws = createWebSocketConnection(
+          token, 
+          () => {
+            // Called when unauthorized message is received and refresh failed
+            setShowUnauthorizedError(true)
+            setIsConnected(false)
+            setIsConnecting(false)
+          },
+          (newToken) => {
+            // Called when token was refreshed successfully
+            console.log("[Chatbot] Token refreshed, reconnecting...")
+            setIsConnected(false)
+            setIsConnecting(false)
+            // Trigger reconnection by incrementing trigger
+            setTokenRefreshTrigger(prev => prev + 1)
+          }
+        )
 
         ws.onopen = () => {
           setIsConnected(true)
@@ -131,6 +150,17 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
         }
 
         ws.onmessage = (event) => {
+          // Check if this is an authentication error that should be handled by our auth handler
+          try {
+            const parsed = JSON.parse(event.data)
+            if (parsed.error === "Authentication failed") {
+              // This will be handled by the auth handler in createWebSocketConnection
+              return
+            }
+          } catch (parseError) {
+            // Not JSON, continue with normal message processing
+          }
+          
           // Remove loading message and add typing message
           setMessages((prev) => {
             const filteredMessages = prev.filter(msg => !msg.isLoading)
@@ -187,7 +217,7 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
         setIsConnecting(false)
       }
     }
-  }, [isOpen, isConnecting, isConnected])
+  }, [isOpen, isConnecting, isConnected, tokenRefreshTrigger])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -246,7 +276,23 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
       setIsConnecting(true)
 
       try {
-        const ws = createWebSocketConnection(token)
+        const ws = createWebSocketConnection(
+          token, 
+          () => {
+            // Called when unauthorized message is received during reconnect and refresh failed
+            setShowUnauthorizedError(true)
+            setIsConnected(false)
+            setIsConnecting(false)
+          },
+          (newToken) => {
+            // Called when token was refreshed successfully during reconnect
+            console.log("[Chatbot] Token refreshed during reconnect, reconnecting...")
+            setIsConnected(false)
+            setIsConnecting(false)
+            // Trigger another reconnection with new token
+            setTokenRefreshTrigger(prev => prev + 1)
+          }
+        )
 
         ws.onopen = () => {
           setIsConnected(true)
@@ -255,6 +301,17 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
         }
 
         ws.onmessage = (event) => {
+          // Check if this is an authentication error that should be handled by our auth handler
+          try {
+            const parsed = JSON.parse(event.data)
+            if (parsed.error === "Authentication failed") {
+              // This will be handled by the auth handler in createWebSocketConnection
+              return
+            }
+          } catch (parseError) {
+            // Not JSON, continue with normal message processing
+          }
+          
           // Remove loading message and add typing message
           setMessages((prev) => {
             const filteredMessages = prev.filter(msg => !msg.isLoading)
@@ -292,6 +349,19 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
   }
 
   if (!isOpen) return null
+
+  // Show unauthorized error if needed
+  if (showUnauthorizedError) {
+    return (
+      <UnauthorizedError 
+        message="Your session has expired. Please log in again to continue chatting with Strato."
+        onClose={() => {
+          setShowUnauthorizedError(false)
+          onClose()
+        }}
+      />
+    )
+  }
 
   return (
     <>
