@@ -1,6 +1,19 @@
-# Ignore generated JSON files, but keep the credentials file explicitly tracked
+# Ignore all JSON files except specific ones we want to track
 *.json
+
+# But keep some JSON files tracked (use ! to negate the ignore)
+!package.json
+!tsconfig.json
+!next.config.mjs
+!components.json
+
+# Google service account credentials - NEVER track these!
 geologica-474819-ed167a0bd70c.json
+geologica-*.json
+
+# Environment files
+.env*
+!.env.example
 
 # Keep TypeScript source files tracked; don't ignore *.ts / *.tsx here.
 # (Previously these lines would prevent new .ts/.tsx files from being added.)
