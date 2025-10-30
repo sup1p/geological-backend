@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "geologica-474819",
+  "private_key_id": "ed167a0bd70c55f18c567f5872a2446cb3c61e2e",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDd6/oYJSWeqsDY\nZfd26wDotmOlLiq2c9YDXXMlB5oOXMhYxEDFMabWA6UITei9Qy/u8rXXC8ukLnVc\nJcIDp3lMeyuvWR0Tp+uMapCdityYyEU4J4/+q/1t16qmH/eLSjaULTX7cXERzXLZ\nh8RcjvvVZm6rOKyfCPV8sm3DFb2LsiXte2j95uh+ON/6QVw3QubguK9oQ6yAWZQt\nvDkTlKlh3ipHERL3WJFbC0JmpgaOIx3g2dS9CvVrCcg3m+7dfvPkjCu1/JuCNzg/\nC13+qSkwYDlBJCJkgPONiWnls75h7N56YLQpYOJTmfDniJbARrahZ7EXZnrBKqAi\njQbErGpPAgMBAAECggEAI1ocFQyV2ZjJ768OpNr64hdr+DxKgZYiWZbhaNy1JeSR\n5dIdn0wxj5Y1DAWdNckmMaJoZUFzx0u/VlaNeZeMMyrL4rsHbsIpO80eDHq6eXwt\nyqxCvAcZ8A2TGbOt83p3B1PMbam8oWFhElYWacg9Rdlzd8MnfI4ozRx/b7xe3YnP\nnlNPcG2r7WmvoIcC/tjmMEHRQzBPmy87Pr2BkFKBJuB07G+oDZJd+FqCMD9vyJyF\nUuHJtkpRunSJqar5BTN0WzG0YQbddF3D+EbLqzg2r4V8FzRvLSKtozFGwW6ARQDG\ndKwqns+x1mtks4jvjKnjltVXHyvjxZEg5IuY0/DAAQKBgQDxw/Cl9TJEDDgOdJrJ\nwOw0YwhcY0lTUIgoFfDiuh+QPULMQyFmpvTs3Eco295um/UyH4FdXocP3lddLhgM\nnBTmgR5EthYY8UwRNhwx7++6j0gHcav0ox6EJbQCDacBHT35z5fBcoIlUJrf5ECK\nOflqRs3udGONYtQga/b78ntOTwKBgQDq/PCgzxpY2EP7DjemhiIAJTdyetYvUTH5\nxsIcI//zDWtor0Z3OGW2rBG4Xv6FHNatMS72SdGUN/6gcGPXqH09FyrSui5YT4P1\npf9bexxBH+nPajvMatQlHCOhDwtTDh9owEyYNSVX1b/S2olMJGDorrvxm0l5yhxG\nSvnCpHIkAQKBgCYyIKj3jhN2Ir0V6waI9khohP+jqAgDpx8+KCqJ4Ua2hwEicfp3\n0iZBvvRTmFa9SQW8OIH51zjIleDg0WfcmOi56YBNjDwwkyX8+INjNuqwjF6wtMwX\noVCbbE8OvR3N8uaux3kGkE046N8Kfq/X7PG/cfWEad4CiST+Ka0waA69AoGADj/E\nP5wPVu/WP3T/PuPHUAbxs8lrD3d29lRtFNPCA3T+3Fw0g6ox0L/iWzG3cU7sXZgr\n5tdXFAvJLuVhyIP5BClReXG8ubIoqE6mi1+NuQ08Wk1wztZzgsSQDIYjA6hJk0qF\n2nzuhML7XMfPp4RVNAbUcrQd4nq0+DY3quvZ2AECgYEAlaXh3Y+TboqNOdNQOfsC\npNyeIdCYn8aCDI4HOWYtHbAaOsCyqgJ1/PahJkkjPC1oUb9PeHOnN1RdvDll/q+n\nQjbzu0olgo/O+/VHYwz0UZcnSEYVmTLGpfYTOzB+MIuJU0zpseL3wnlGd1FAnsD4\nMLEjRaS3f4DXN/lNYWIE8Ic=\n-----END PRIVATE KEY-----\n",
+  "client_email": "geologica@geologica-474819.iam.gserviceaccount.com",
+  "client_id": "109769872741152098712",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/geologica%40geologica-474819.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

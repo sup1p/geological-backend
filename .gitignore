@@ -1,5 +1,6 @@
+# Ignore generated JSON files, but keep the credentials file explicitly tracked
 *.json
-*.ts
-*.tsx
+!geologica-474819-ed167a0bd70c.json
 
-geologica-474819-ed167a0bd70c.json
+# Keep TypeScript source files tracked; don't ignore *.ts / *.tsx here.
+# (Previously these lines would prevent new .ts/.tsx files from being added.)
