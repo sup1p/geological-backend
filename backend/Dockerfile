@@ -4,7 +4,7 @@ FROM python:3.10-slim as base
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV GOOGLE_APPLICATION_CREDENTIALS=/geologica-474819-ed167a0bd70c.json
+ENV GOOGLE_APPLICATION_CREDENTIALS=/geologica-474819-4a3ec8318485.json
 
 # Set working directory
 WORKDIR /app
@@ -37,7 +37,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # Copy service account key
-COPY ./geologica-474819-ed167a0bd70c.json .
+COPY ./geologica-474819-4a3ec8318485.json .
 
 # Copy application code (this layer changes most often, so it's last)
 COPY . .
